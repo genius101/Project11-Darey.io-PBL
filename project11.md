@@ -77,6 +77,148 @@
 
 ![3 f](https://user-images.githubusercontent.com/10243139/129180519-8fedea0c-de53-4d10-850e-a75d914c88d3.jpg)
 
+<h2>Step 4 – Set up an Ansible Inventory</h2>
+
+<p>Ansible uses TCP port 22 by default, which means it needs to ssh into target servers from Jenkins-Ansible host – for this you need to copy your private (.pem) key to your server.</p>
+
+	eval `ssh-agent -s`
+	ssh-add <path-to-private-key>
+
+![4 a](https://user-images.githubusercontent.com/10243139/129182304-4ab2c8ba-3238-4e64-9379-9782550fe426.jpg)
+
+<p>Update your inventory/dev.yml file with this snippet of code:</p>
+
+	[nfs]
+	<NFS-Server-Private-IP-Address> ansible_ssh_user='ec2-user'
+
+	[webservers]
+	<Web-Server1-Private-IP-Address> ansible_ssh_user='ec2-user'
+	<Web-Server2-Private-IP-Address> ansible_ssh_user='ec2-user'
+
+	[db]
+	<Database-Private-IP-Address> ansible_ssh_user='ec2-user' 
+
+	[lb]
+	<Load-Balancer-Private-IP-Address> ansible_ssh_user='ubuntu'
+
+![4 b](https://user-images.githubusercontent.com/10243139/129182392-27ecbf0e-ce6f-4710-a22e-e46ce9b6e18e.jpg)
+
+<h2>Step 5 – Create a Common Playbook</h2>
+
+<p>It is time to start giving Ansible the instructions on what you needs to be performed on all servers listed in inventory/dev.</p>
+
+<p>In common.yml playbook you will write configuration for repeatable, re-usable, and multi-machine tasks that is common to systems within the infrastructure.</p>
+
+<p>Update your playbooks/common.yml file with following code:</p>
+
+	---
+	- name: update web, nfs and db servers
+	  hosts: webservers, nfs, db
+	  remote_user: ec2-user
+	  become: yes
+	  become_user: root
+	  tasks:
+	  - name: ensure wireshark is at the latest version
+	    yum:
+	      name: wireshark
+	      state: latest
+
+	- name: update LB server
+	  hosts: lb
+	  remote_user: ubuntu
+	  become: yes
+	  become_user: root
+	  tasks:
+	  - name: ensure wireshark is at the latest version
+	    apt:
+	      name: wireshark
+	      state: latest
+	      
+![5 a](https://user-images.githubusercontent.com/10243139/129182974-47ccef20-ee03-49bb-ad9d-df8a989f5c25.jpg)
+
+<h2>Step 6 – Update GIT with the latest code</h2>
+
+<p>Commit your code into GitHub:</p>
+
+	Commit the Code using VS Code
+	
+![6 a](https://user-images.githubusercontent.com/10243139/129183419-7b9fff24-af6f-4d8d-bca8-c60ee22dbc2a.jpg)
+
+<p>Push Code to Git using VS Code</p>
+
+![6 b](https://user-images.githubusercontent.com/10243139/129183506-76449c9d-4ede-4d89-89d7-6fae6974854a.jpg)
+
+<p>Merge the code to the master using VS Code</p>
+
+![6 c](https://user-images.githubusercontent.com/10243139/129183630-3eb32879-17a0-496d-bee8-b7db03602ce7.jpg)
+
+<p>Once your code changes appear in master branch – Jenkins will do its job and save all the files (build artifacts) to /var/lib/jenkins/jobs/ansible/builds/<build_number>/archive/ directory on Jenkins-Ansible server.</p>
+	
+![6 d](https://user-images.githubusercontent.com/10243139/129184027-ad133d33-1ba1-47bb-8dca-c69cb976346c.jpg)
+
+<h2>Step 7 – Run first Ansible test</h2>
+
+<p>Now, it is time to execute ansible-playbook command and verify if your playbook actually works:</p>
+
+	ansible-playbook -i /var/lib/jenkins/jobs/ansible/builds/<build-number>/archive/inventory/dev.yml /var/lib/jenkins/jobs/ansible/builds/<build-number>/archive/playbooks/common.yml
+
+![7 a](https://user-images.githubusercontent.com/10243139/129184142-9d05f5a7-f014-429e-8d71-29b2a818f430.jpg)
+
+<p>You can go to each of the servers and check if wireshark has been installed by running which wireshark or wireshark --version</p>
+
+![7 b](https://user-images.githubusercontent.com/10243139/129184235-7aa056be-b681-45eb-b09a-6ac090acffa9.jpg)
+
+<p>Your updated with Ansible architecture now looks like this:</p>
+
+![ansible_architecture](https://user-images.githubusercontent.com/10243139/129184324-9ba05d71-784c-4679-9364-e84bac931f80.png)
+
+<h3>NB: There was some modification that had to be done for everything to run successfully</h3>
+
+<p>The dev.yml was modified as follows:</p>
+
+	[nfs]
+	172.31.3.128 ansible_connection=ssh ansible_ssh_user=ec2-user ansible_ssh_private_key_file=/home/ubuntu/key.pem
+
+	[webservers]
+	172.31.12.46 ansible_connection=ssh ansible_ssh_user=ec2-user ansible_ssh_private_key_file=/home/ubuntu/key.pem
+	172.31.11.202 ansible_connection=ssh ansible_ssh_user=ec2-user ansible_ssh_private_key_file=/home/ubuntu/key.pem
+
+	[db]
+	172.31.22.39 ansible_connection=ssh ansible_ssh_user=ubuntu ansible_ssh_private_key_file=/home/ubuntu/key.pem
+
+	[lb]
+	172.31.43.144 ansible_connection=ssh ansible_ssh_user=ubuntu ansible_ssh_private_key_file=/home/ubuntu/key.pem
+
+<p>The common.yml was modified as follows:</p>
+
+	---
+	- name: update web, nfs and db servers
+	  hosts: webservers, nfs
+	  remote_user: ec2-user
+	  become: yes
+	  become_user: root
+	  tasks:
+	  - name: ensure wireshark is at the latest version
+	    yum:
+	      name: wireshark
+	      state: latest
+
+	- name: update LB server
+	  hosts: lb, db
+	  remote_user: ubuntu
+	  become: yes
+	  become_user: root
+	  tasks:
+	  - name: ensure wireshark is at the latest version
+	    apt:
+	      name: wireshark
+	      state: latest
+
+<p>Major Changes was that Database Server is Ubuntu and not RedHat and ansible ssh details had to be added as the former code was giving permission denied.</p>
+
+![NB](https://user-images.githubusercontent.com/10243139/129184607-89d8759f-b4c1-4a13-a84c-06fa23e1f510.jpg)
 
 
+<h3>Congratulations</h3>
 
+<p>You have just automated your routine tasks by implementing your first Ansible project with Jenkins</p>
